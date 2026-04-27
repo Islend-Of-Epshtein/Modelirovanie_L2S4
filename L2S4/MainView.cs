@@ -12,52 +12,55 @@ namespace WholesaleStoreSimulation
         private TextBox txtPrecision;
         private Button btnRun;
         private Button btnRunMultiple;
+        private Button btnManualCalc;
         private DataGridView dgvResults;
         private Chart chartLoad;
         private Label lblStatus;
         private NumericUpDown nudIterations;
         private DataGridView dgvLogs;
+        private NumericUpDown nudManualCustomers; // Для выбора количества клиентов в ручном расчёте
+        private Label lblManualCustomers;
 
         public MainForm()
         {
             InitializeComponent();
             this.Size = new Size(1400, 800);
             this.StartPosition = FormStartPosition.CenterScreen;
-            this.Text = "Имитационная модель: Оптовый магазин (с логами)";
+            this.Text = "Имитационная модель: Оптовый магазин (с ручным расчётом)";
         }
 
         private void InitializeComponent()
         {
-            // Создание элементов
             txtSimulationTime = new TextBox();
             txtPrecision = new TextBox();
             btnRun = new Button();
             btnRunMultiple = new Button();
+            btnManualCalc = new Button();
             nudIterations = new NumericUpDown();
             dgvResults = new DataGridView();
             chartLoad = new Chart();
             lblStatus = new Label();
             dgvLogs = new DataGridView();
+            nudManualCustomers = new NumericUpDown();
+            lblManualCustomers = new Label();
 
             ((System.ComponentModel.ISupportInitialize)(nudIterations)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(dgvResults)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(chartLoad)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(dgvLogs)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(nudManualCustomers)).BeginInit();
             SuspendLayout();
 
-            // Label для времени
             Label lblTime = new Label() { Text = "Время моделирования (мин):", Location = new Point(12, 15), Size = new Size(180, 23) };
             txtSimulationTime.Location = new Point(200, 13);
             txtSimulationTime.Size = new Size(100, 23);
-            txtSimulationTime.Text = "600";
+            txtSimulationTime.Text = "480";
 
-            // Точность
             Label lblPrecision = new Label() { Text = "Точность (%):", Location = new Point(12, 45), Size = new Size(180, 23) };
             txtPrecision.Location = new Point(200, 43);
             txtPrecision.Size = new Size(100, 23);
             txtPrecision.Text = "20";
 
-            // Количество прогонов
             Label lblIter = new Label() { Text = "Кол-во прогонов:", Location = new Point(12, 75), Size = new Size(180, 23) };
             nudIterations.Location = new Point(200, 73);
             nudIterations.Size = new Size(100, 23);
@@ -65,7 +68,17 @@ namespace WholesaleStoreSimulation
             nudIterations.Maximum = 100;
             nudIterations.Value = 30;
 
-            // Кнопки
+            // Элементы для ручного расчёта
+            lblManualCustomers.Text = "Клиентов для ручного расчёта:";
+            lblManualCustomers.Location = new Point(320, 45);
+            lblManualCustomers.Size = new Size(180, 23);
+
+            nudManualCustomers.Location = new Point(510, 43);
+            nudManualCustomers.Size = new Size(60, 23);
+            nudManualCustomers.Minimum = 1;
+            nudManualCustomers.Maximum = 50;
+            nudManualCustomers.Value = 4;
+
             btnRun.Location = new Point(320, 12);
             btnRun.Size = new Size(130, 30);
             btnRun.Text = "Одиночный прогон";
@@ -76,7 +89,19 @@ namespace WholesaleStoreSimulation
             btnRunMultiple.Text = "Многократный прогон";
             btnRunMultiple.Click += BtnRunMultiple_Click;
 
-            // Таблица результатов
+            btnManualCalc.Location = new Point(600, 12);
+            btnManualCalc.Size = new Size(130, 30);
+            btnManualCalc.Text = "Ручной расчёт";
+            btnManualCalc.Click += BtnManualCalc_Click;
+
+            CheckBox chkFixedMode = new CheckBox();
+            chkFixedMode.Text = "Фиксированные значения";
+            chkFixedMode.Location = new Point(760, 15);
+            chkFixedMode.Size = new Size(110, 40);
+            chkFixedMode.Checked = false;
+            chkFixedMode.CheckedChanged += ChkDeterministic_CheckedChanged;
+            this.Controls.Add(chkFixedMode);
+
             dgvResults.Location = new Point(12, 110);
             dgvResults.Size = new Size(850, 250);
             dgvResults.AllowUserToAddRows = false;
@@ -87,7 +112,6 @@ namespace WholesaleStoreSimulation
             dgvResults.Columns[0].Width = 300;
             dgvResults.Columns[1].Width = 200;
 
-            // График
             chartLoad.Location = new Point(12, 370);
             chartLoad.Size = new Size(850, 380);
             chartLoad.ChartAreas.Add(new ChartArea());
@@ -95,7 +119,6 @@ namespace WholesaleStoreSimulation
             chartLoad.Series[0].ChartType = SeriesChartType.Column;
             chartLoad.Series[0].IsValueShownAsLabel = true;
 
-            // Таблица логов
             dgvLogs.Location = new Point(880, 12);
             dgvLogs.Size = new Size(500, 738);
             dgvLogs.AllowUserToAddRows = false;
@@ -110,22 +133,23 @@ namespace WholesaleStoreSimulation
             dgvLogs.Columns[2].Width = 220;
             dgvLogs.Columns[3].Width = 100;
 
-            // Строка статуса
             lblStatus.Location = new Point(12, 760);
             lblStatus.Size = new Size(1360, 25);
             lblStatus.BackColor = Color.LightGray;
             lblStatus.Text = "Готов к работе";
             lblStatus.TextAlign = ContentAlignment.MiddleCenter;
 
-            // Добавление элементов на форму
             Controls.Add(lblTime);
             Controls.Add(txtSimulationTime);
             Controls.Add(lblPrecision);
             Controls.Add(txtPrecision);
             Controls.Add(lblIter);
             Controls.Add(nudIterations);
+            Controls.Add(lblManualCustomers);
+            Controls.Add(nudManualCustomers);
             Controls.Add(btnRun);
             Controls.Add(btnRunMultiple);
+            Controls.Add(btnManualCalc);
             Controls.Add(dgvResults);
             Controls.Add(chartLoad);
             Controls.Add(dgvLogs);
@@ -135,11 +159,11 @@ namespace WholesaleStoreSimulation
             ((System.ComponentModel.ISupportInitialize)(dgvResults)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(chartLoad)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(dgvLogs)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(nudManualCustomers)).EndInit();
             ResumeLayout(false);
             PerformLayout();
         }
 
-        // ========== Обработчики и логика (копируем из предыдущего ответа) ==========
         private void BtnRun_Click(object sender, EventArgs e)
         {
             try
@@ -164,6 +188,91 @@ namespace WholesaleStoreSimulation
             }
         }
 
+        private void ChkDeterministic_CheckedChanged(object sender, EventArgs e)
+        {
+            CheckBox chk = (CheckBox)sender;
+            WholesaleStoreSimulation.FixedMode = chk.Checked;
+
+            if (chk.Checked)
+            {
+                WholesaleStoreSimulation.ResetDeterministicIndex();
+                lblStatus.Text = "Включен режим ТЕСТА (неслучайные значения). Все интервалы фиксированы.";
+                AddLogEntry(DateTime.Now.ToString("HH:mm:ss"), "ТЕСТ_РЕЖИМ",
+                    "Включен детерминированный режим",
+                    "Интервал прихода = 2 мин, время поиска = число товаров, путь и расчёт = средние значения");
+            }
+            else
+            {
+                lblStatus.Text = "Обычный режим (случайные значения)";
+                AddLogEntry(DateTime.Now.ToString("HH:mm:ss"), "ТЕСТ_РЕЖИМ",
+                    "Выключен детерминированный режим",
+                    "Включена генерация случайных значений");
+            }
+        }
+
+        private void BtnManualCalc_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                dgvLogs.Rows.Clear();
+                int customersCount = (int)nudManualCustomers.Value;
+                lblStatus.Text = $"Выполняется ручной расчёт (теоретический) для {customersCount} клиентов...";
+                Application.DoEvents();
+
+                WholesaleStoreSimulation.RunManualCalculation(AddLogEntry, customersCount);
+
+                dgvResults.Rows.Clear();
+                dgvResults.Rows.Add("Ручной расчёт", $"Теоретические значения для {customersCount} клиентов");
+
+                // Простые расчёты для итоговой таблицы
+                double travelTime = 3.5;
+                double checkoutTime = 3.0;
+                int productsCount = 5;
+                double firstServiceTime = travelTime + productsCount + checkoutTime; // 11.5
+                double firstReturnTime = 2.0 + firstServiceTime;
+
+                int remaining = customersCount - 1;
+                int batchSize = Math.Min(remaining, 3);
+                double secondServiceTime = 0;
+                if (batchSize > 0)
+                    secondServiceTime = travelTime + (productsCount * batchSize) + checkoutTime;
+
+                double totalSimTime = firstReturnTime + secondServiceTime;
+                double loadFactor = (firstServiceTime + secondServiceTime) / totalSimTime;
+
+                // Расчёт среднего времени ожидания
+                double totalWaitTime = 0;
+                for (int i = 1; i < customersCount && i <= batchSize + 1; i++)
+                {
+                    totalWaitTime += firstReturnTime - (2.0 + i * 2.0);
+                }
+                double avgWaitTime = customersCount > 1 ? totalWaitTime / (customersCount - 1) : 0;
+
+                // Расчёт среднего времени в магазине
+                double totalStoreTime = firstServiceTime;
+                for (int i = 1; i < customersCount && i <= batchSize + 1; i++)
+                {
+                    totalStoreTime += (firstReturnTime + secondServiceTime) - (2.0 + i * 2.0);
+                }
+                double avgStoreTime = customersCount > 0 ? totalStoreTime / customersCount : 0;
+
+                dgvResults.Rows.Add("Всего клиентов", customersCount);
+                dgvResults.Rows.Add("Обслужено клиентов", customersCount);
+                dgvResults.Rows.Add("Отказов", 0);
+                dgvResults.Rows.Add("Вероятность отказа", "0%");
+                dgvResults.Rows.Add("Среднее время ожидания (мин)", $"{avgWaitTime:F2}");
+                dgvResults.Rows.Add("Среднее время в магазине (мин)", $"{avgStoreTime:F2}");
+                dgvResults.Rows.Add("Загрузка клерка 1", $"{loadFactor:P0}");
+
+                lblStatus.Text = $"Ручной расчёт для {customersCount} клиентов завершён (теоретические значения)";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при ручном расчёте: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                lblStatus.Text = "Ошибка при ручном расчёте";
+            }
+        }
+
         private void BtnRunMultiple_Click(object sender, EventArgs e)
         {
             try
@@ -178,7 +287,12 @@ namespace WholesaleStoreSimulation
 
                 var aggregatedResults = RunMultipleSimulations(simTime, iterations, targetPrecision);
                 DisplayAggregatedResults(aggregatedResults);
-                UpdateAggregatedChart(aggregatedResults);
+
+                if (aggregatedResults.AverageLoadFactors.Length > 0)
+                    UpdateAggregatedChart(aggregatedResults);
+                else
+                    chartLoad.Series[0].Points.Clear();
+
                 lblStatus.Text = $"Многократный прогон ({iterations} итераций) завершен. Точность: {targetPrecision * 100}%";
             }
             catch (Exception ex)
@@ -202,28 +316,28 @@ namespace WholesaleStoreSimulation
             var rejectedList = new System.Collections.Generic.List<int>();
             var waitTimeList = new System.Collections.Generic.List<double>();
             var totalTimeList = new System.Collections.Generic.List<double>();
-            var loadC1 = new System.Collections.Generic.List<double>();
-            var loadC2 = new System.Collections.Generic.List<double>();
-            var loadC3 = new System.Collections.Generic.List<double>();
-            var loadC4 = new System.Collections.Generic.List<double>();
-            var loadC5 = new System.Collections.Generic.List<double>();
+
+            int actualClerksCount = 0;
+            var clerkLoadLists = new System.Collections.Generic.List<System.Collections.Generic.List<double>>();
 
             for (int i = 0; i < iterations; i++)
             {
                 var model = new WholesaleStoreSimulation(simTime);
                 model.Run();
 
+                if (i == 0)
+                    actualClerksCount = model.Results.ClerksCount;
+
                 servedList.Add(model.Results.ServedCustomers);
                 rejectedList.Add(model.Results.RejectedCustomers);
                 waitTimeList.Add(model.Results.AverageWaitTime);
                 totalTimeList.Add(model.Results.AverageTotalTime);
-                if (model.Results.ClerkLoadFactors.Count >= 5)
+
+                for (int c = 0; c < model.Results.ClerkLoadFactors.Count; c++)
                 {
-                    loadC1.Add(model.Results.ClerkLoadFactors[0]);
-                    loadC2.Add(model.Results.ClerkLoadFactors[1]);
-                    loadC3.Add(model.Results.ClerkLoadFactors[2]);
-                    loadC4.Add(model.Results.ClerkLoadFactors[3]);
-                    loadC5.Add(model.Results.ClerkLoadFactors[4]);
+                    if (clerkLoadLists.Count <= c)
+                        clerkLoadLists.Add(new System.Collections.Generic.List<double>());
+                    clerkLoadLists[c].Add(model.Results.ClerkLoadFactors[c]);
                 }
 
                 if (i % 10 == 0)
@@ -233,24 +347,31 @@ namespace WholesaleStoreSimulation
                 }
             }
 
-            double meanWait = waitTimeList.Average();
-            double stdDevWait = Math.Sqrt(waitTimeList.Sum(w => Math.Pow(w - meanWait, 2)) / iterations);
-            double actualPrecision = 1.96 * stdDevWait / Math.Sqrt(iterations) / meanWait;
+            double meanWait = waitTimeList.Count > 0 ? waitTimeList.Average() : 0;
+            double stdDevWait = waitTimeList.Count > 0 ? Math.Sqrt(waitTimeList.Sum(w => Math.Pow(w - meanWait, 2)) / waitTimeList.Count) : 0;
+            double actualPrecision = (meanWait > 0 && waitTimeList.Count > 0) ? 1.96 * stdDevWait / Math.Sqrt(waitTimeList.Count) / meanWait : 0;
+
+            var avgLoadFactors = new double[actualClerksCount];
+            for (int i = 0; i < actualClerksCount && i < clerkLoadLists.Count; i++)
+            {
+                avgLoadFactors[i] = clerkLoadLists[i].Count > 0 ? clerkLoadLists[i].Average() : 0;
+            }
 
             return new AggregatedResults
             {
                 Iterations = iterations,
                 TargetPrecision = targetPrecision,
                 ActualPrecision = actualPrecision,
-                AverageServed = servedList.Average(),
-                AverageRejected = rejectedList.Average(),
+                AverageServed = servedList.Count > 0 ? servedList.Average() : 0,
+                AverageRejected = rejectedList.Count > 0 ? rejectedList.Average() : 0,
                 AverageWaitTime = meanWait,
-                AverageTotalTime = totalTimeList.Average(),
-                RejectionProbability = servedList.Zip(rejectedList, (s, r) => (double)r / (s + r)).Average(),
-                AverageLoadFactors = new double[] { loadC1.Average(), loadC2.Average(), loadC3.Average(), loadC4.Average(), loadC5.Average() },
-                MinServed = servedList.Min(),
-                MaxServed = servedList.Max(),
-                StdDevWait = stdDevWait
+                AverageTotalTime = totalTimeList.Count > 0 ? totalTimeList.Average() : 0,
+                RejectionProbability = (servedList.Count > 0 && rejectedList.Count > 0) ? servedList.Zip(rejectedList, (s, r) => (double)r / (s + r)).Average() : 0,
+                AverageLoadFactors = avgLoadFactors,
+                MinServed = servedList.Count > 0 ? servedList.Min() : 0,
+                MaxServed = servedList.Count > 0 ? servedList.Max() : 0,
+                StdDevWait = stdDevWait,
+                ClerksCount = actualClerksCount
             };
         }
 
@@ -285,6 +406,7 @@ namespace WholesaleStoreSimulation
             dgvResults.Rows.Add("Среднее время ожидания (мин)", $"{results.AverageWaitTime:F2}");
             dgvResults.Rows.Add("СКО времени ожидания", $"{results.StdDevWait:F2}");
             dgvResults.Rows.Add("Среднее время в магазине (мин)", $"{results.AverageTotalTime:F2}");
+            dgvResults.Rows.Add($"Количество клерков в модели", results.ClerksCount);
         }
 
         private void UpdateChart(SimulationResults results)
@@ -338,5 +460,6 @@ namespace WholesaleStoreSimulation
         public int MinServed { get; set; }
         public int MaxServed { get; set; }
         public double StdDevWait { get; set; }
+        public int ClerksCount { get; set; }
     }
 }
