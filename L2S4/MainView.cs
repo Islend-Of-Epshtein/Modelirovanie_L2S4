@@ -365,7 +365,7 @@ namespace WholesaleStoreSimulation
                     }
                     meanWait = waitTimeList.Count > 0 ? waitTimeList.Average() : 0;
                     stdDevWait = waitTimeList.Count > 0 ? Math.Sqrt(waitTimeList.Sum(w => Math.Pow(w - meanWait, 2)) / waitTimeList.Count) : 0;
-                    newCountIterations = (int)Math.Pow(GetNormalQuantile(targetPrecision) * stdDevWait / (1 - targetPrecision), 2);
+                    newCountIterations = (int)Math.Pow(GetNormalQuantile(1-targetPrecision) * stdDevWait / (targetPrecision), 2);
                 }
                 while (newCountIterations > iterations);
                 a.Add(meanWait);
