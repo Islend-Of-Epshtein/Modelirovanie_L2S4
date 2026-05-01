@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
@@ -54,7 +55,7 @@ namespace WholesaleStoreSimulation
             Label lblTime = new Label() { Text = "Время моделирования (мин):", Location = new Point(12, 15), Size = new Size(180, 23) };
             txtSimulationTime.Location = new Point(200, 13);
             txtSimulationTime.Size = new Size(100, 23);
-            txtSimulationTime.Text = "480";
+            txtSimulationTime.Text = "600";
 
             Label lblPrecision = new Label() { Text = "Точность (%):", Location = new Point(12, 45), Size = new Size(180, 23) };
             txtPrecision.Location = new Point(200, 43);
@@ -111,7 +112,7 @@ namespace WholesaleStoreSimulation
             dgvResults.Columns.Add("Value", "Значение");
             dgvResults.Columns[0].Width = 300;
             dgvResults.Columns[1].Width = 200;
-
+            
             chartLoad.Location = new Point(12, 370);
             chartLoad.Size = new Size(850, 380);
             chartLoad.ChartAreas.Add(new ChartArea());
@@ -312,56 +313,70 @@ namespace WholesaleStoreSimulation
 
         private AggregatedResults RunMultipleSimulations(double simTime, int iterations, double targetPrecision)
         {
-            var servedList = new System.Collections.Generic.List<int>();
-            var rejectedList = new System.Collections.Generic.List<int>();
-            var waitTimeList = new System.Collections.Generic.List<double>();
-            var totalTimeList = new System.Collections.Generic.List<double>();
-
-            int actualClerksCount = 0;
-            var clerkLoadLists = new System.Collections.Generic.List<System.Collections.Generic.List<double>>();
-
-            for (int i = 0; i < iterations; i++)
-            {
-                var model = new WholesaleStoreSimulation(simTime);
-                model.Run();
-
-                if (i == 0)
-                    actualClerksCount = model.Results.ClerksCount;
-
-                servedList.Add(model.Results.ServedCustomers);
-                rejectedList.Add(model.Results.RejectedCustomers);
-                waitTimeList.Add(model.Results.AverageWaitTime);
-                totalTimeList.Add(model.Results.AverageTotalTime);
-
-                for (int c = 0; c < model.Results.ClerkLoadFactors.Count; c++)
+            targetPrecision = 1-targetPrecision;
+            List<double> a = new List<double>();
+           
+                int newCountIterations = iterations, actualClerksCount = 0;
+                var servedList = new List<int>();
+                var rejectedList = new List<int>();
+                var waitTimeList = new List<double>();
+                var totalTimeList = new List<double>();
+                var avgLoadFactors = new double[0];
+                double meanWait = -1, stdDevWait = -1;
+                do
                 {
-                    if (clerkLoadLists.Count <= c)
-                        clerkLoadLists.Add(new System.Collections.Generic.List<double>());
-                    clerkLoadLists[c].Add(model.Results.ClerkLoadFactors[c]);
+                    iterations = newCountIterations;
+                    servedList = new List<int>();
+                    rejectedList = new List<int>();
+                    waitTimeList = new List<double>();
+                    totalTimeList = new List<double>();
+                    var clerkLoadLists = new List<List<double>>();
+
+                    for (int i = 0; i < iterations; i++)
+                    {
+                        var model = new WholesaleStoreSimulation(simTime);
+                        model.Run();
+
+                        if (i == 0)
+                            actualClerksCount = model.Results.ClerksCount;
+
+                        servedList.Add(model.Results.ServedCustomers);
+                        rejectedList.Add(model.Results.RejectedCustomers);
+                        waitTimeList.Add(model.Results.AverageWaitTime);
+                        totalTimeList.Add(model.Results.AverageTotalTime);
+
+                        for (int c = 0; c < model.Results.ClerkLoadFactors.Count; c++)
+                        {
+                            if (clerkLoadLists.Count <= c)
+                                clerkLoadLists.Add(new List<double>());
+                            clerkLoadLists[c].Add(model.Results.ClerkLoadFactors[c]);
+                        }
+
+                        if (i % 10 == 0)
+                        {
+                            lblStatus.Text = $"Прогон {i + 1} из {iterations}...";
+                            Application.DoEvents();
+                        }
+                    }
+                    avgLoadFactors = new double[actualClerksCount];
+                    for (int i = 0; i < actualClerksCount && i < clerkLoadLists.Count; i++)
+                    {
+                        avgLoadFactors[i] = clerkLoadLists[i].Count > 0 ? clerkLoadLists[i].Average() : 0;
+                    }
+                    meanWait = waitTimeList.Count > 0 ? waitTimeList.Average() : 0;
+                    stdDevWait = waitTimeList.Count > 0 ? Math.Sqrt(waitTimeList.Sum(w => Math.Pow(w - meanWait, 2)) / waitTimeList.Count) : 0;
+                    newCountIterations = (int)Math.Pow(GetNormalQuantile(targetPrecision) * stdDevWait / (1 - targetPrecision), 2);
                 }
+                while (newCountIterations > iterations);
+                a.Add(meanWait);
+            
 
-                if (i % 10 == 0)
-                {
-                    lblStatus.Text = $"Прогон {i + 1} из {iterations}...";
-                    Application.DoEvents();
-                }
-            }
-
-            double meanWait = waitTimeList.Count > 0 ? waitTimeList.Average() : 0;
-            double stdDevWait = waitTimeList.Count > 0 ? Math.Sqrt(waitTimeList.Sum(w => Math.Pow(w - meanWait, 2)) / waitTimeList.Count) : 0;
-            double actualPrecision = (meanWait > 0 && waitTimeList.Count > 0) ? 1.96 * stdDevWait / Math.Sqrt(waitTimeList.Count) / meanWait : 0;
-
-            var avgLoadFactors = new double[actualClerksCount];
-            for (int i = 0; i < actualClerksCount && i < clerkLoadLists.Count; i++)
-            {
-                avgLoadFactors[i] = clerkLoadLists[i].Count > 0 ? clerkLoadLists[i].Average() : 0;
-            }
-
+         
             return new AggregatedResults
             {
                 Iterations = iterations,
                 TargetPrecision = targetPrecision,
-                ActualPrecision = actualPrecision,
+                ActualPrecision = iterations,
                 AverageServed = servedList.Count > 0 ? servedList.Average() : 0,
                 AverageRejected = rejectedList.Count > 0 ? rejectedList.Average() : 0,
                 AverageWaitTime = meanWait,
@@ -374,7 +389,27 @@ namespace WholesaleStoreSimulation
                 ClerksCount = actualClerksCount
             };
         }
+        public static double GetNormalQuantile(double confidenceLevel)
+        {
+            if (confidenceLevel <= 0.5 || confidenceLevel >= 0.9999)
+                throw new ArgumentException("Доверительная вероятность должна быть в интервале (0.5, 0.9999)");
 
+            // Таблица: доверительная вероятность → квантиль
+            double[] levels = { 0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.91, 0.95, 0.96, 0.97, 0.98, 0.99, 0.995, 0.999 };
+            double[] quantiles = { 0.000, 0.524, 1.036, 1.282, 1.440, 1.645, 1.695, 1.960, 2.054, 2.170, 2.326, 2.576, 2.807, 3.291 };
+
+            // Линейная интерполяция между табличными значениями
+            for (int i = 0; i < levels.Length - 1; i++)
+            {
+                if (confidenceLevel <= levels[i + 1])
+                {
+                    double t = (confidenceLevel - levels[i]) / (levels[i + 1] - levels[i]);
+                    return quantiles[i] + t * (quantiles[i + 1] - quantiles[i]);
+                }
+            }
+
+            return quantiles[quantiles.Length - 1];
+        }
         private void DisplayResults(SimulationResults results)
         {
             dgvResults.Rows.Clear();
@@ -395,10 +430,8 @@ namespace WholesaleStoreSimulation
             dgvResults.Rows.Clear();
             dgvResults.Rows.Add("Количество прогонов", results.Iterations);
             dgvResults.Rows.Add("Целевая точность", $"{results.TargetPrecision:P2}");
-            dgvResults.Rows.Add("Фактическая точность", $"{results.ActualPrecision:P2}");
-            dgvResults.Rows.Add("Точность достигнута", results.ActualPrecision <= results.TargetPrecision ? "ДА" : "НЕТ");
-            dgvResults.Rows.Add("", "");
             dgvResults.Rows.Add("Среднее кол-во клиентов", $"{results.AverageServed:F2}");
+            dgvResults.Rows.Add("Итераций", results.ActualPrecision);
             dgvResults.Rows.Add("Мин. обслужено", results.MinServed);
             dgvResults.Rows.Add("Макс. обслужено", results.MaxServed);
             dgvResults.Rows.Add("Среднее кол-во отказов", $"{results.AverageRejected:F2}");
