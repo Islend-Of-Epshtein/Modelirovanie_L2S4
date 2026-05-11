@@ -19,23 +19,13 @@ namespace WholesaleStoreSimulation
         private static Random _rnd = new Random();
         private static bool _fixedMode = false;
 
-        public static void SetFixedMode(bool fixedMode)
-        {
-            _fixedMode = fixedMode;
-        }
+        public static void SetFixedMode(bool fixedMode) => _fixedMode = fixedMode;
 
         public Customer(int id, double arrivalTime)
         {
             Id = id;
             ArrivalTime = arrivalTime;
-            if (_fixedMode)
-            {
-                ProductsCount = 5;
-            }
-            else
-            {
-                ProductsCount = _rnd.Next(3, 8);
-            }
+            ProductsCount = _fixedMode ? 5 : _rnd.Next(3, 8);
         }
     }
 
@@ -44,7 +34,8 @@ namespace WholesaleStoreSimulation
         public int Id { get; set; }
         public bool IsWorking { get; set; }
         public bool IsBusy { get; set; }
-        public double TotalWorkTime { get; set; }
+        public double TotalWorkTime { get; set; }      // общее время работы за всё время моделирования (для статистики)
+        public double WorkTimeToday { get; set; }      // время работы в текущем дне (для перерывов)
         public int CustomersServed { get; set; }
         public List<Customer> CurrentBatch { get; set; }
         public double CurrentServiceTime { get; set; }
@@ -61,6 +52,7 @@ namespace WholesaleStoreSimulation
             IsBusy = false;
             CurrentBatch = new List<Customer>();
             TotalWorkTime = 0;
+            WorkTimeToday = 0;
             CustomersServed = 0;
             HasTakenFirstBreak = false;
             HasTakenSecondBreak = false;
@@ -79,10 +71,18 @@ namespace WholesaleStoreSimulation
             IsBusy = false;
         }
 
-        public double GetLoadFactor(double simulationTime)
+        public double GetLoadFactor(double simulationTime) =>
+            simulationTime <= 0 ? 0 : TotalWorkTime / simulationTime;
+
+        // Сброс состояния для нового дня (обнуляем рабочее время за день и флаги перерывов)
+        public void ResetForNewDay(double currentTime)
         {
-            if (simulationTime <= 0) return 0;
-            return TotalWorkTime / simulationTime;
+            WorkTimeToday = 0;
+            HasTakenFirstBreak = false;
+            HasTakenSecondBreak = false;
+            // Если клерк был на перерыве, принудительно завершаем перерыв
+            if (!IsWorking)
+                EndBreak(currentTime);
         }
     }
 
@@ -93,6 +93,7 @@ namespace WholesaleStoreSimulation
         private int _clerksCount = 5;
         private int _maxBatchSize = 3;
         private int _maxQueueLength = 50;
+        private const double DayLength = 600; // 10 часов в минутах
 
         private int _totalCustomers = 0;
         private int _servedCustomers = 0;
@@ -128,10 +129,8 @@ namespace WholesaleStoreSimulation
                 _clerks.Add(new Clerk(i));
         }
 
-        private void Log(string time, string eventType, string description, string extra = "")
-        {
+        private void Log(string time, string eventType, string description, string extra = "") =>
             OnLog?.Invoke(time, eventType, description, extra);
-        }
 
         public static void ResetDeterministicIndex()
         {
@@ -145,24 +144,49 @@ namespace WholesaleStoreSimulation
             return baseTime.AddMinutes(minutes).ToString("HH:mm");
         }
 
+        // Вызовется при переходе через границу рабочего дня
+        private void ResetDayState(double currentTime)
+        {
+            int dayNumber = (int)(currentTime / DayLength);
+            Log(FormatTime(currentTime), "СМЕНА_ДНЯ", $"Начало рабочего дня №{dayNumber + 1}",
+                "Сброшены счётчики рабочего времени клерков и флаги перерывов");
+            foreach (var clerk in _clerks)
+                clerk.ResetForNewDay(currentTime);
+        }
+
         public void Run()
         {
             Initialize();
+            int lastCompletedDay = 0;
 
             while (_eventQueue.Count > 0)
             {
                 var currentEvent = _eventQueue.Dequeue();
                 if (currentEvent.Time > _simulationTime)
                 {
+                    // Учёт недообслуженных клиентов в конце моделирования
                     foreach (var clerk in _clerks)
                     {
                         if (clerk.IsBusy && clerk.CurrentBatch.Count > 0)
                         {
                             double worked = _simulationTime - clerk.CurrentBatch[0].ServiceStartTime;
-                            if (worked > 0) clerk.TotalWorkTime += worked;
+                            if (worked > 0)
+                            {
+                                clerk.TotalWorkTime += worked;
+                                clerk.WorkTimeToday += worked;
+                            }
                         }
                     }
                     break;
+                }
+
+                // Проверка на начало нового дня (если время перевалило через очередной рубеж)
+                int currentDay = (int)(currentEvent.Time / DayLength);
+                if (currentDay > lastCompletedDay)
+                {
+                    for (int day = lastCompletedDay + 1; day <= currentDay; day++)
+                        ResetDayState(day * DayLength);
+                    lastCompletedDay = currentDay;
                 }
 
                 switch (currentEvent.Type)
@@ -280,9 +304,7 @@ namespace WholesaleStoreSimulation
                 formulaInfo);
 
             foreach (var c in batch)
-            {
                 c.ServiceStartTime = currentTime;
-            }
 
             _eventQueue.Enqueue(new Event(EventType.ServiceComplete, currentTime + serviceTime, clerk));
 
@@ -294,7 +316,9 @@ namespace WholesaleStoreSimulation
         private void ProcessServiceComplete(Event ev)
         {
             var clerk = ev.Clerk;
+            // Добавляем отработанное время в общую статистику и в счётчик текущего дня
             clerk.TotalWorkTime += clerk.CurrentServiceTime;
+            clerk.WorkTimeToday += clerk.CurrentServiceTime;
             clerk.CustomersServed += clerk.CurrentBatch.Count;
 
             foreach (var customer in clerk.CurrentBatch)
@@ -333,7 +357,8 @@ namespace WholesaleStoreSimulation
         {
             if (!clerk.IsWorking || clerk.IsBusy) return;
 
-            if (!clerk.HasTakenFirstBreak && clerk.TotalWorkTime >= 150)
+            // Используем WorkTimeToday (рабочее время в текущем дне) для определения права на перерыв
+            if (!clerk.HasTakenFirstBreak && clerk.WorkTimeToday >= 150)
             {
                 if (_random.NextDouble() < 0.9)
                 {
@@ -344,7 +369,7 @@ namespace WholesaleStoreSimulation
                         clerk.HasTakenFirstBreak = true;
                         Log(FormatTime(currentTime), "ПЕРЕРЫВ_НАЧАЛО",
                             $"Клерк {clerk.Id} ушёл на первый перерыв",
-                            $"Накоплено работы: {clerk.TotalWorkTime:F1} мин (>=150), вероятность 90% выпала, отдыхающих: {onBreakCount} (<2)");
+                            $"Накоплено работы за сегодня: {clerk.WorkTimeToday:F1} мин (>=150), вероятность 90% выпала, отдыхающих: {onBreakCount} (<2)");
                         _eventQueue.Enqueue(new Event(EventType.BreakEnd, clerk.BreakEndTime, clerk));
                         return;
                     }
@@ -364,7 +389,7 @@ namespace WholesaleStoreSimulation
                 return;
             }
 
-            if (!clerk.HasTakenSecondBreak && clerk.HasTakenFirstBreak && clerk.TotalWorkTime >= 420)
+            if (!clerk.HasTakenSecondBreak && clerk.HasTakenFirstBreak && clerk.WorkTimeToday >= 420)
             {
                 if (_random.NextDouble() < 0.9)
                 {
@@ -375,7 +400,7 @@ namespace WholesaleStoreSimulation
                         clerk.HasTakenSecondBreak = true;
                         Log(FormatTime(currentTime), "ПЕРЕРЫВ_НАЧАЛО",
                             $"Клерк {clerk.Id} ушёл на второй перерыв",
-                            $"Накоплено работы: {clerk.TotalWorkTime:F1} мин (>=420), отдыхающих: {onBreakCount} (<2)");
+                            $"Накоплено работы за сегодня: {clerk.WorkTimeToday:F1} мин (>=420), отдыхающих: {onBreakCount} (<2)");
                         _eventQueue.Enqueue(new Event(EventType.BreakEnd, clerk.BreakEndTime, clerk));
                     }
                     else
@@ -413,21 +438,12 @@ namespace WholesaleStoreSimulation
             return -Math.Log(1.0 - _random.NextDouble()) / lambda;
         }
 
-        private double GenerateUniform(double min, double max)
-        {
-            if (FixedMode)
-            {
-                return (min + max) / 2;
-            }
-            return min + _random.NextDouble() * (max - min);
-        }
+        private double GenerateUniform(double min, double max) =>
+            FixedMode ? (min + max) / 2 : min + _random.NextDouble() * (max - min);
 
         private double GenerateNormal(double mean, double stdDev)
         {
-            if (FixedMode)
-            {
-                return mean;
-            }
+            if (FixedMode) return mean;
             double u1 = 1.0 - _random.NextDouble();
             double u2 = 1.0 - _random.NextDouble();
             double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
@@ -451,14 +467,12 @@ namespace WholesaleStoreSimulation
             };
         }
 
-        // ========== СТАТИЧЕСКИЙ МЕТОД ДЛЯ РУЧНОГО РАСЧЁТА ==========
+        // Статический метод ручного расчёта (без изменений, он не зависит от дней)
         public static void RunManualCalculation(LogEventHandler logCallback, int customersCount)
         {
             ResetDeterministicIndex();
-
             logCallback?.Invoke("10:00", "РУЧНОЙ_РАСЧЁТ", $"Начало ручного расчёта (теоретического) для {customersCount} клиентов",
                 "Интервал прихода = 2 мин, время поиска = число товаров, путь и расчёт = средние значения");
-
             double travelTime = 3.5;
             double checkoutTime = 3.0;
             int productsCount = 5;

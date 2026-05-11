@@ -365,7 +365,7 @@ namespace WholesaleStoreSimulation
                     }
                     meanWait = waitTimeList.Count > 0 ? waitTimeList.Average() : 0;
                     stdDevWait = waitTimeList.Count > 0 ? Math.Sqrt(waitTimeList.Sum(w => Math.Pow(w - meanWait, 2)) / waitTimeList.Count) : 0;
-                    newCountIterations = (int)Math.Pow(GetNormalQuantile(targetPrecision) * stdDevWait / (1-targetPrecision), 2);
+                    newCountIterations = (int)Math.Pow(1.762 * stdDevWait / (1-targetPrecision), 2);
                 }
                 while (newCountIterations > iterations);
                 a.Add(meanWait);
@@ -424,14 +424,12 @@ namespace WholesaleStoreSimulation
                 dgvResults.Rows.Add($"Загрузка клерка {i + 1}", $"{results.ClerkLoadFactors[i]:P2}");
             dgvResults.Rows.Add("Средняя загрузка", $"{results.AverageLoadFactor:P2}");
         }
-
         private void DisplayAggregatedResults(AggregatedResults results)
         {
             dgvResults.Rows.Clear();
             dgvResults.Rows.Add("Количество прогонов", results.Iterations);
             dgvResults.Rows.Add("Целевая точность", $"{results.TargetPrecision:P2}");
             dgvResults.Rows.Add("Среднее кол-во клиентов", $"{results.AverageServed:F2}");
-            dgvResults.Rows.Add("Итераций", results.ActualPrecision);
             dgvResults.Rows.Add("Мин. обслужено", results.MinServed);
             dgvResults.Rows.Add("Макс. обслужено", results.MaxServed);
             dgvResults.Rows.Add("Среднее кол-во отказов", $"{results.AverageRejected:F2}");
